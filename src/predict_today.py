@@ -19,7 +19,7 @@ from preprocessing import (
     build_single_match_features,
 )
 
-BLEND_RATIO = 0.35
+BLEND_RATIO = 0.15
 CLASS_NAMES = ["home_win", "draw", "away_win"]
 
 
