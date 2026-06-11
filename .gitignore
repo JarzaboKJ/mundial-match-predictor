@@ -1,0 +1,40 @@
+# Sekrety i środowisko
+.env
+venv/
+.venv/
+
+# Dane surowe (duże pliki, nie do repozytorium)
+data/raw/
+
+# Modele (binarki generowane przez pipeline)
+models/
+*.pkl
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Outputy i wyniki (generowane runtime)
+outputs/
+results/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Systemy plików
+.DS_Store
+Thumbs.db
+
+# Build / dist
+dist/
+build/
+*.egg-info/
+*.egg
+
+# IDE
+.vscode/settings.json
+.idea/
