@@ -411,7 +411,13 @@ def main():
         adjusted = apply_injury_adjustment(adjusted, home_inj, away_inj)
         adjusted = apply_morale_adjustment(adjusted, home_morale, away_morale)
 
-        final_proba = BLEND_RATIO * adjusted + (1 - BLEND_RATIO) * bookie_proba
+        h2h_hw = int(features["h2h_home_wins"].iloc[0])
+        h2h_d = int(features["h2h_draws"].iloc[0])
+        h2h_aw = int(features["h2h_away_wins"].iloc[0])
+        has_h2h = (h2h_hw + h2h_d + h2h_aw) > 0
+        blend = BLEND_RATIO if has_h2h else 0.0
+
+        final_proba = blend * adjusted + (1 - blend) * bookie_proba
         final_proba = final_proba / final_proba.sum()
 
         winner_idx = np.argmax(final_proba)
@@ -425,7 +431,8 @@ def main():
         print(f"  FINALNA:     Home {final_proba[0]*100:4.0f}% | Draw {final_proba[1]*100:4.0f}% | Away {final_proba[2]*100:4.0f}%")
         winner_name = home if winner_idx == 0 else (away if winner_idx == 2 else "REMIS")
         print(f"  Predykcja: {winner_name} wygra ({final_proba[winner_idx]*100:.0f}%)")
-        print(f"  Kontuzje: {home}={home_inj}, {away}={away_inj} | Morale: {home_morale.split()[0]} vs {away_morale.split()[0]}")
+        h2h_tag = f"H2H: {h2h_hw}-{h2h_d}-{h2h_aw}" if has_h2h else "H2H: brak (blend=0)"
+        print(f"  Kontuzje: {home}={home_inj}, {away}={away_inj} | Morale: {home_morale.split()[0]} vs {away_morale.split()[0]} | {h2h_tag}")
 
         pred = {
             "date": today_str,
