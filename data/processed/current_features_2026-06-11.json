@@ -4,18 +4,20 @@
     {
       "home_team": "Mexico",
       "away_team": "South Africa",
+      "home_injuries": [
+        {"player": "Santiago Giménez", "importance": 5, "role": "key_scorer"}
+      ],
+      "away_injuries": [
+        {"player": "Aubrey Modiba", "importance": 4, "role": "squad_player"}
+      ],
       "home_injuries_count": 1,
       "away_injuries_count": 1,
-      "home_injuries_players": [
-        "Santiago Giménez — ankle injury (surgery earlier in 2026); returned to full training and cleared to feature, though fitness was monitored in the lead-up"
-      ],
-      "away_injuries_players": [
-        "Aubrey Modiba — hamstring injury suffered in CAF Champions League final; completed first full training session, declared available by coach Hugo Broos"
-      ],
       "home_form": "W-W-W-D-D",
       "away_form": "W-D-L-D-L",
-      "home_morale": "high — Mexico are unbeaten in their last 8 matches (W6, D2) heading into the tournament, including a 5-1 demolition of Serbia in their final warm-up, and carry enormous home-crowd energy at a sold-out Estadio Azteca.",
-      "away_morale": "medium — South Africa secured a historic return to the World Cup by topping their CAF qualifying group, but recent form has been poor (0 wins in last 4 matches) and they enter as heavy underdogs against a host nation.",
+      "home_form_score": 1,
+      "away_form_score": -1,
+      "home_morale": "high",
+      "away_morale": "medium",
       "bookie_home_prob": 0.6641,
       "bookie_draw_prob": 0.211,
       "bookie_away_prob": 0.1249,
@@ -40,29 +42,31 @@
         }
       ],
       "key_news": [
-        "Mexico vs. South Africa opens the 2026 FIFA World Cup at Estadio Azteca in Mexico City — a rematch of the iconic 2010 World Cup opener that ended 1-1, with Estadio Azteca becoming the first stadium to host three World Cup opening matches (1970, 1986, 2026).",
-        "Santiago Giménez cleared to play after ankle surgery; Aubrey Modiba declared fit by South Africa coach Hugo Broos after completing full training despite hamstring scare — both squads near full strength for the tournament opener.",
-        "Mexico coach Javier Aguirre warns El Tri will 'not take anything for granted' against Bafana Bafana, while an opening ceremony headlined by Shakira, J Balvin, and Tyla will precede kickoff before 80,000+ fans.",
-        "17-year-old Gilberto Mora tipped as a potential World Cup breakout star for Mexico, as El Tri look to go beyond the round-of-16 for the first time in their history."
+        "Mexico vs. South Africa opens the 2026 FIFA World Cup at Estadio Azteca in Mexico City — a rematch of the iconic 2010 World Cup opener that ended 1-1.",
+        "Santiago Giménez cleared to play after ankle surgery; Aubrey Modiba declared fit by South Africa coach Hugo Broos after completing full training despite hamstring scare.",
+        "Mexico coach Javier Aguirre warns El Tri will 'not take anything for granted' against Bafana Bafana.",
+        "17-year-old Gilberto Mora tipped as a potential World Cup breakout star for Mexico."
       ]
     },
     {
       "home_team": "Korea Republic",
       "away_team": "Czechia",
+      "home_injuries": [
+        {"player": "Kim Tae-hyeon", "importance": 5, "role": "squad_player"},
+        {"player": "Cho Yu-min", "importance": 4, "role": "key_defender"},
+        {"player": "Bae Jun-ho", "importance": 7, "role": "key_midfielder"}
+      ],
+      "away_injuries": [
+        {"player": "Vaclav Cerny", "importance": 7, "role": "key_winger"}
+      ],
       "home_injuries_count": 3,
       "away_injuries_count": 1,
-      "home_injuries_players": [
-        "Kim Tae-hyeon — left ankle injury, ruled out of group stage",
-        "Cho Yu-min — foot injury, replaced in squad by Cho Wi-je",
-        "Bae Jun-ho — ankle injury, major doubt for match"
-      ],
-      "away_injuries_players": [
-        "Vaclav Cerny — injury, confirmed miss for entire tournament"
-      ],
       "home_form": "W-W-L-L-W",
       "away_form": "W-W-W-W-W",
-      "home_morale": "medium — Korea recovered with back-to-back friendly wins over El Salvador (1-0) and Trinidad & Tobago (5-0) ahead of the tournament, but earlier losses to Austria and Ivory Coast by an aggregate 5-0 margin still loom large.",
-      "away_morale": "high — Czechia arrive on a five-match winning run, including a 3-1 warm-up win over Guatemala and dramatic back-to-back penalty shootout wins over Ireland and Denmark to qualify, demonstrating strong mental resilience.",
+      "home_form_score": 0,
+      "away_form_score": 2,
+      "home_morale": "medium",
+      "away_morale": "high",
       "bookie_home_prob": 0.3611,
       "bookie_draw_prob": 0.3103,
       "bookie_away_prob": 0.3286,
@@ -87,10 +91,10 @@
         }
       ],
       "key_news": [
-        "Korea Republic vs Czechia kicks off World Cup 2026 Group A action at Estadio Akron in Guadalajara on June 11 at 10:00 PM ET — the first-ever competitive meeting between the two nations.",
-        "Czechia return to the FIFA World Cup for the first time in 20 years after dramatic penalty shootout wins over Ireland and Denmark in the UEFA play-offs, while South Korea face questions over defensive cohesion after a 5-0 aggregate loss to Ivory Coast and Austria in March friendlies.",
-        "Bae Jun-ho is a major doubt for Korea with an ankle injury, while Czechia are without creative winger Vaclav Cerny (injury) for the entire tournament — Lyon's Pavel Sulc is expected to step up in his absence.",
-        "Czech coach Miroslav Koubek praised Son Heung-min as 'a Korean legend' and warned of South Korea's attacking threat ahead of the Group A opener, with Patrik Schick set as Czechia's focal point up front."
+        "Korea Republic vs Czechia kicks off World Cup 2026 Group A action at Estadio Akron in Guadalajara on June 11.",
+        "Czechia return to the FIFA World Cup for the first time in 20 years after dramatic penalty shootout wins over Ireland and Denmark.",
+        "Bae Jun-ho is a major doubt for Korea with an ankle injury, while Czechia are without Vaclav Cerny for the entire tournament.",
+        "Czech coach Miroslav Koubek praised Son Heung-min as 'a Korean legend' ahead of the Group A opener."
       ]
     }
   ]

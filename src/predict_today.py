@@ -32,20 +32,40 @@ def parse_morale(morale_text):
     return 0.0
 
 
-def apply_injury_adjustment(proba, home_inj, away_inj):
+def apply_injury_adjustment(proba, home_injuries, away_injuries):
     p = proba.copy()
-    home_penalty = 0.02 * min(home_inj, 3)
-    away_penalty = 0.02 * min(away_inj, 3)
 
-    if home_penalty > 0 and p[0] > home_penalty:
-        p[0] -= home_penalty
-        p[2] += home_penalty
+    home_impact = sum(inj.get("importance", 5) * 0.008 for inj in home_injuries)
+    away_impact = sum(inj.get("importance", 5) * 0.008 for inj in away_injuries)
 
-    if away_penalty > 0 and p[2] > away_penalty:
-        p[2] -= away_penalty
-        p[0] += away_penalty
+    home_impact = min(home_impact, 0.15)
+    away_impact = min(away_impact, 0.15)
 
-    return p / p.sum()
+    if home_impact > 0 and p[0] > home_impact:
+        p[0] -= home_impact
+        other = p[1] + p[2]
+        if other > 0:
+            p[1] += home_impact * (p[1] / other)
+            p[2] += home_impact * (p[2] / other)
+
+    if away_impact > 0 and p[2] > away_impact:
+        p[2] -= away_impact
+        other = p[0] + p[1]
+        if other > 0:
+            p[0] += away_impact * (p[0] / other)
+            p[1] += away_impact * (p[1] / other)
+
+    p = np.clip(p, 0.01, None)
+    return p / p.sum(), home_impact, away_impact
+
+
+def apply_form_adjustment(proba, home_form_score, away_form_score):
+    p = proba.copy()
+    form_adj = (home_form_score - away_form_score) * 0.02
+    p[0] += form_adj
+    p[2] -= form_adj
+    p = np.clip(p, 0.01, None)
+    return p / p.sum(), form_adj
 
 
 def apply_morale_adjustment(proba, home_morale_text, away_morale_text):
@@ -57,7 +77,7 @@ def apply_morale_adjustment(proba, home_morale_text, away_morale_text):
     p[2] += away_adj
 
     p = np.clip(p, 0.01, None)
-    return p / p.sum()
+    return p / p.sum(), home_adj, away_adj
 
 
 def generate_html(predictions, today_str):
@@ -71,31 +91,66 @@ def generate_html(predictions, today_str):
         fp = pred["final_proba"]
         mp = pred["model_proba"]
         bp = pred["bookie_proba"]
+        pb = pred["post_blend_proba"]
 
         fh, fd, fa = fp["home_win"] * 100, fp["draw"] * 100, fp["away_win"] * 100
         mh, md, ma = mp["home_win"] * 100, mp["draw"] * 100, mp["away_win"] * 100
         bh, bd, ba = bp["home_win"] * 100, bp["draw"] * 100, bp["away_win"] * 100
+        pbh, pbd, pba = pb["home_win"] * 100, pb["draw"] * 100, pb["away_win"] * 100
 
         fav_idx = np.argmax([fh, fd, fa])
         fav_labels = [f"{h} wygra", "Remis", f"{a} wygra"]
         fav_label = fav_labels[fav_idx]
         fav_pct = [fh, fd, fa][fav_idx]
 
-        home_inj = pred.get("home_injuries_count", 0)
-        away_inj = pred.get("away_injuries_count", 0)
+        home_injuries = pred.get("home_injuries", [])
+        away_injuries = pred.get("away_injuries", [])
         home_morale = pred.get("home_morale", "medium")
         away_morale = pred.get("away_morale", "medium")
-
-        home_inj_players = pred.get("home_injuries_players", [])
-        away_inj_players = pred.get("away_injuries_players", [])
+        home_form_score = pred.get("home_form_score", 0)
+        away_form_score = pred.get("away_form_score", 0)
+        injury_home = pred.get("injury_impact_home", 0)
+        injury_away = pred.get("injury_impact_away", 0)
+        form_adj = pred.get("form_adjustment", 0)
+        morale_home = pred.get("morale_adjustment_home", 0)
+        morale_away = pred.get("morale_adjustment_away", 0)
 
         inj_html = ""
-        if home_inj_players:
-            items = "".join(f"<li>{p}</li>" for p in home_inj_players)
+        if home_injuries:
+            items = "".join(
+                f'<li>{p["player"]} <span class="imp">(importance={p.get("importance", "?")})</span></li>'
+                for p in home_injuries
+            )
             inj_html += f'<div class="inj-list"><strong>{h}:</strong><ul>{items}</ul></div>'
-        if away_inj_players:
-            items = "".join(f"<li>{p}</li>" for p in away_inj_players)
+        else:
+            inj_html += f'<div class="inj-list"><strong>{h}:</strong> brak kontuzji</div>'
+
+        if away_injuries:
+            items = "".join(
+                f'<li>{p["player"]} <span class="imp">(importance={p.get("importance", "?")})</span></li>'
+                for p in away_injuries
+            )
             inj_html += f'<div class="inj-list"><strong>{a}:</strong><ul>{items}</ul></div>'
+        else:
+            inj_html += f'<div class="inj-list"><strong>{a}:</strong> brak kontuzji</div>'
+
+        morale_net = (morale_home - morale_away) * 100
+        adj_html = f"""
+            <div class="adjustments">
+                <h4>Adjustmenty</h4>
+                <div class="adj-row">
+                    <span class="adj-label">Injury penalty:</span>
+                    <span>{h} {f'-{injury_home*100:.1f}%' if injury_home > 0 else '0%'} | {a} {f'-{injury_away*100:.1f}%' if injury_away > 0 else '0%'}</span>
+                </div>
+                <div class="adj-row">
+                    <span class="adj-label">Forma:</span>
+                    <span>{h} {home_form_score:+d} | {a} {away_form_score:+d} &rarr; form adjustment {form_adj*100:+.0f}%</span>
+                </div>
+                <div class="adj-row">
+                    <span class="adj-label">Morale:</span>
+                    <span>{home_morale.split()[0]} vs {away_morale.split()[0]} &rarr; morale adjustment {morale_net:+.0f}%</span>
+                </div>
+            </div>"""
 
         rows_html += f"""
         <div class="match-card">
@@ -128,28 +183,25 @@ def generate_html(predictions, today_str):
                 </div>
             </div>
             <div class="details">
-                <div class="detail-row">
-                    <span class="detail-label">Kontuzje:</span>
-                    <span>{h} = {home_inj}, {a} = {away_inj}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Morale:</span>
-                    <span>{h}: {home_morale.split()[0]} | {a}: {away_morale.split()[0]}</span>
-                </div>
-                {f'<div class="injuries-detail">{inj_html}</div>' if inj_html else ''}
+                <div class="injuries-detail">{inj_html}</div>
+                {adj_html}
             </div>
         </div>
         """
 
         bench_rows += f"""
         <tr>
-            <td rowspan="3" class="match-cell">{h} vs {a}</td>
+            <td rowspan="4" class="match-cell">{h} vs {a}</td>
             <td>Model</td>
             <td>{mh:.1f}%</td><td>{md:.1f}%</td><td>{ma:.1f}%</td>
         </tr>
         <tr>
             <td>Bukmacherzy</td>
             <td>{bh:.1f}%</td><td>{bd:.1f}%</td><td>{ba:.1f}%</td>
+        </tr>
+        <tr>
+            <td>Post-blend</td>
+            <td>{pbh:.1f}%</td><td>{pbd:.1f}%</td><td>{pba:.1f}%</td>
         </tr>
         <tr class="final-row">
             <td>Finalna</td>
@@ -247,13 +299,33 @@ def generate_html(predictions, today_str):
         margin-right: 0.5rem;
     }}
     .injuries-detail {{
-        margin-top: 0.8rem;
+        margin-bottom: 0.8rem;
         font-size: 0.85rem;
-        color: #aaa;
+        color: #ccc;
     }}
     .inj-list {{ margin-bottom: 0.4rem; }}
     .inj-list ul {{ margin-left: 1.5rem; }}
     .inj-list li {{ margin-bottom: 0.2rem; }}
+    .imp {{ color: #f39c12; font-size: 0.8rem; }}
+    .adjustments {{
+        margin-top: 0.8rem;
+        padding: 0.8rem 1rem;
+        background: rgba(15, 52, 96, 0.5);
+        border-radius: 8px;
+    }}
+    .adjustments h4 {{
+        color: #e94560;
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+    }}
+    .adj-row {{
+        margin-bottom: 0.3rem;
+        font-size: 0.85rem;
+    }}
+    .adj-label {{
+        color: #8899aa;
+        margin-right: 0.5rem;
+    }}
     h3 {{
         text-align: center;
         color: #e94560;
@@ -294,7 +366,7 @@ def generate_html(predictions, today_str):
 <body>
 <h1>Mundial 2026 — Predykcje na {today_str}</h1>
 {rows_html}
-<h3>Benchmark: Model vs Bukmacherzy vs Finalna predykcja</h3>
+<h3>Benchmark: Model vs Bukmacherzy vs Post-blend vs Finalna</h3>
 <table>
     <thead>
         <tr>
@@ -308,7 +380,7 @@ def generate_html(predictions, today_str):
 </body>
 </html>"""
 
-    path = f"outputs/daily_predictions.html"
+    path = "outputs/daily_predictions.html"
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"\nHTML saved to {path}")
@@ -395,21 +467,30 @@ def main():
                 cur["bookie_draw_prob"],
                 cur["bookie_away_prob"],
             ])
-            home_inj = cur.get("home_injuries_count", 0)
-            away_inj = cur.get("away_injuries_count", 0)
+            home_injuries = cur.get("home_injuries", [])
+            away_injuries = cur.get("away_injuries", [])
+            if not home_injuries and cur.get("home_injuries_count", 0) > 0:
+                home_injuries = [
+                    {"player": p, "importance": 5, "role": "unknown"}
+                    for p in cur.get("home_injuries_players", [])
+                ]
+            if not away_injuries and cur.get("away_injuries_count", 0) > 0:
+                away_injuries = [
+                    {"player": p, "importance": 5, "role": "unknown"}
+                    for p in cur.get("away_injuries_players", [])
+                ]
+            home_form_score = cur.get("home_form_score", 0)
+            away_form_score = cur.get("away_form_score", 0)
             home_morale = cur.get("home_morale", "medium")
             away_morale = cur.get("away_morale", "medium")
-            home_inj_players = cur.get("home_injuries_players", [])
-            away_inj_players = cur.get("away_injuries_players", [])
         else:
             bookie_proba = model_proba.copy()
-            home_inj = away_inj = 0
-            home_morale = away_morale = "medium"
-            home_inj_players = away_inj_players = []
-
-        adjusted = model_proba.copy()
-        adjusted = apply_injury_adjustment(adjusted, home_inj, away_inj)
-        adjusted = apply_morale_adjustment(adjusted, home_morale, away_morale)
+            home_injuries = []
+            away_injuries = []
+            home_form_score = 0
+            away_form_score = 0
+            home_morale = "medium"
+            away_morale = "medium"
 
         h2h_hw = int(features["h2h_home_wins"].iloc[0])
         h2h_d = int(features["h2h_draws"].iloc[0])
@@ -417,22 +498,59 @@ def main():
         has_h2h = (h2h_hw + h2h_d + h2h_aw) > 0
         blend = BLEND_RATIO if has_h2h else 0.0
 
-        final_proba = blend * adjusted + (1 - blend) * bookie_proba
-        final_proba = final_proba / final_proba.sum()
+        post_blend = blend * model_proba + (1 - blend) * bookie_proba
+        post_blend = post_blend / post_blend.sum()
+
+        adjusted, home_impact, away_impact = apply_injury_adjustment(
+            post_blend, home_injuries, away_injuries
+        )
+
+        adjusted, form_adj = apply_form_adjustment(
+            adjusted, home_form_score, away_form_score
+        )
+
+        final_proba, morale_adj_home, morale_adj_away = apply_morale_adjustment(
+            adjusted, home_morale, away_morale
+        )
 
         winner_idx = np.argmax(final_proba)
         predicted_winner = CLASS_NAMES[winner_idx]
 
-        print(f"\n{'='*50}")
-        print(f"  {home} vs {away}")
-        print(f"{'='*50}")
+        morale_net = (morale_adj_home - morale_adj_away) * 100
+
+        print(f"\n{'='*55}")
+        print(f"  === {home} vs {away} ===")
+        print(f"{'='*55}")
+
+        if home_injuries:
+            inj_str = ", ".join(
+                f'{p["player"]} (importance={p.get("importance", "?")})' for p in home_injuries
+            )
+            print(f"  Kontuzje: {home} → {inj_str}")
+        else:
+            print(f"  Kontuzje: {home} → brak")
+        if away_injuries:
+            inj_str = ", ".join(
+                f'{p["player"]} (importance={p.get("importance", "?")})' for p in away_injuries
+            )
+            print(f"            {away} → {inj_str}")
+        else:
+            print(f"            {away} → brak")
+
+        print(f"  Injury penalty: {home} -{home_impact*100:.1f}% | {away} -{away_impact*100:.1f}%")
+        print(f"  Forma: {home} {home_form_score:+d} | {away} {away_form_score:+d}"
+              f" → form adjustment {form_adj*100:+.0f}%")
+        print(f"  Morale: {home_morale.split()[0]} vs {away_morale.split()[0]}"
+              f" → morale adjustment {morale_net:+.0f}%")
+
         print(f"  Model:       Home {model_proba[0]*100:4.0f}% | Draw {model_proba[1]*100:4.0f}% | Away {model_proba[2]*100:4.0f}%")
         print(f"  Bukmacherzy: Home {bookie_proba[0]*100:4.0f}% | Draw {bookie_proba[1]*100:4.0f}% | Away {bookie_proba[2]*100:4.0f}%")
+        print(f"  Post-blend:  Home {post_blend[0]*100:4.0f}% | Draw {post_blend[1]*100:4.0f}% | Away {post_blend[2]*100:4.0f}%")
         print(f"  FINALNA:     Home {final_proba[0]*100:4.0f}% | Draw {final_proba[1]*100:4.0f}% | Away {final_proba[2]*100:4.0f}%")
         winner_name = home if winner_idx == 0 else (away if winner_idx == 2 else "REMIS")
         print(f"  Predykcja: {winner_name} wygra ({final_proba[winner_idx]*100:.0f}%)")
         h2h_tag = f"H2H: {h2h_hw}-{h2h_d}-{h2h_aw}" if has_h2h else "H2H: brak (blend=0)"
-        print(f"  Kontuzje: {home}={home_inj}, {away}={away_inj} | Morale: {home_morale.split()[0]} vs {away_morale.split()[0]} | {h2h_tag}")
+        print(f"  {h2h_tag}")
 
         pred = {
             "date": today_str,
@@ -448,6 +566,11 @@ def main():
                 "draw": round(float(bookie_proba[1]), 4),
                 "away_win": round(float(bookie_proba[2]), 4),
             },
+            "post_blend_proba": {
+                "home_win": round(float(post_blend[0]), 4),
+                "draw": round(float(post_blend[1]), 4),
+                "away_win": round(float(post_blend[2]), 4),
+            },
             "final_proba": {
                 "home_win": round(float(final_proba[0]), 4),
                 "draw": round(float(final_proba[1]), 4),
@@ -456,12 +579,19 @@ def main():
             "predicted_winner": predicted_winner,
             "actual_result": None,
             "correct": None,
-            "home_injuries_count": home_inj,
-            "away_injuries_count": away_inj,
-            "home_injuries_players": home_inj_players,
-            "away_injuries_players": away_inj_players,
+            "home_injuries": home_injuries,
+            "away_injuries": away_injuries,
+            "home_injuries_count": len(home_injuries),
+            "away_injuries_count": len(away_injuries),
+            "home_form_score": home_form_score,
+            "away_form_score": away_form_score,
             "home_morale": home_morale,
             "away_morale": away_morale,
+            "injury_impact_home": round(float(home_impact), 4),
+            "injury_impact_away": round(float(away_impact), 4),
+            "form_adjustment": round(float(form_adj), 4),
+            "morale_adjustment_home": round(float(morale_adj_home), 4),
+            "morale_adjustment_away": round(float(morale_adj_away), 4),
         }
         predictions.append(pred)
 
@@ -472,6 +602,7 @@ def main():
                 "away_team": away,
                 "model_proba": pred["model_proba"],
                 "bookie_proba": pred["bookie_proba"],
+                "post_blend_proba": pred["post_blend_proba"],
                 "final_proba": pred["final_proba"],
                 "predicted_winner": predicted_winner,
                 "actual_result": None,
