@@ -70,7 +70,7 @@ def fetch_match_data(client, home, away):
 
     response = _api_call_with_retry(
         client,
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=4096,
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
         messages=[{"role": "user", "content": prompt}],
@@ -79,7 +79,7 @@ def fetch_match_data(client, home, away):
     while response.stop_reason == "pause_turn":
         response = _api_call_with_retry(
             client,
-            model="claude-sonnet-4-6",
+            model="claude-haiku-4-5-20251001",
             max_tokens=4096,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[
