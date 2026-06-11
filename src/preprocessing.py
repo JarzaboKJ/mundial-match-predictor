@@ -185,3 +185,69 @@ def build_feature_matrix(
     features_df = pd.DataFrame(rows)
     features_df = features_df.fillna(0)
     return features_df
+
+
+FEATURE_COLS = [
+    "rank_diff",
+    "points_diff",
+    "home_win_rate",
+    "away_win_rate",
+    "home_recent_win_rate",
+    "away_recent_win_rate",
+    "h2h_home_wins",
+    "h2h_draws",
+    "h2h_away_wins",
+    "stage",
+    "home_appearances",
+    "away_appearances",
+    "home_champion_count",
+    "away_champion_count",
+    "home_final_appearances",
+    "away_final_appearances",
+]
+
+
+def build_single_match_features(
+    home_team: str,
+    away_team: str,
+    stage: int,
+    team_stats: pd.DataFrame,
+    h2h_stats: pd.DataFrame,
+    ranking_df: pd.DataFrame,
+) -> pd.DataFrame:
+    home = NAME_MAP.get(home_team, home_team)
+    away = NAME_MAP.get(away_team, away_team)
+
+    ranking = ranking_df.set_index("team")[["rank", "points"]]
+
+    home_rank = ranking.loc[home, "rank"] if home in ranking.index else 100.0
+    away_rank = ranking.loc[away, "rank"] if away in ranking.index else 100.0
+    home_pts = ranking.loc[home, "points"] if home in ranking.index else 0.0
+    away_pts = ranking.loc[away, "points"] if away in ranking.index else 0.0
+
+    hs = team_stats.loc[home] if home in team_stats.index else pd.Series(dtype=float)
+    as_ = team_stats.loc[away] if away in team_stats.index else pd.Series(dtype=float)
+
+    h2h_hw, h2h_d, h2h_aw = _get_h2h(h2h_stats, home, away)
+
+    row = {
+        "rank_diff": home_rank - away_rank,
+        "points_diff": home_pts - away_pts,
+        "home_win_rate": hs.get("overall_win_rate", 0.0),
+        "away_win_rate": as_.get("overall_win_rate", 0.0),
+        "home_recent_win_rate": hs.get("recent_win_rate", 0.0),
+        "away_recent_win_rate": as_.get("recent_win_rate", 0.0),
+        "h2h_home_wins": h2h_hw,
+        "h2h_draws": h2h_d,
+        "h2h_away_wins": h2h_aw,
+        "stage": stage,
+        "home_appearances": hs.get("total_wc_appearances", 0),
+        "away_appearances": as_.get("total_wc_appearances", 0),
+        "home_champion_count": hs.get("champion_count", 0),
+        "away_champion_count": as_.get("champion_count", 0),
+        "home_final_appearances": hs.get("final_appearances", 0),
+        "away_final_appearances": as_.get("final_appearances", 0),
+    }
+
+    df = pd.DataFrame([row], columns=FEATURE_COLS).fillna(0)
+    return df
