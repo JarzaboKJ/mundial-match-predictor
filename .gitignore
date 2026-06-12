@@ -17,8 +17,9 @@ __pycache__/
 *.pyd
 .Python
 
-# Outputy i wyniki (generowane runtime)
-outputs/
+# Wyniki runtime (JSON/CSV generowane przez pipeline)
+outputs/*.json
+outputs/*.csv
 results/
 
 # Jupyter

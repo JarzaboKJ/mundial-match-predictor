@@ -444,7 +444,7 @@ def generate_html(predictions, today_str):
 </body>
 </html>"""
 
-    path = "outputs/daily_predictions.html"
+    path = f"outputs/daily_predictions_{today_str}.html"
     with open(path, "w", encoding="utf-8") as f:
         f.write(html_doc)
     print(f"\nHTML saved to {path}")
