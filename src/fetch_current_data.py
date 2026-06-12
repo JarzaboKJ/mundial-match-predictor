@@ -13,6 +13,9 @@ load_dotenv()
 
 SCHEDULE_PATH = "data/raw/schedule_2026.csv"
 OUTPUT_DIR = "data/processed"
+MODEL = "claude-haiku-4-5-20251001"
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search"}
+MAX_PAUSE_TURNS = 5
 
 PROMPT_TEMPLATE = """Today is {date}. The FIFA World Cup 2026 match {home} vs {away} is scheduled for today.
 
@@ -71,11 +74,15 @@ def _api_call_with_retry(client, **kwargs):
     for attempt in range(max_retries):
         try:
             return client.messages.create(**kwargs)
-        except anthropic.RateLimitError:
+        except (
+            anthropic.RateLimitError,
+            anthropic.InternalServerError,
+            anthropic.APIConnectionError,
+        ) as e:
             wait = 60 * (attempt + 1)
-            print(f"    Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries})...")
+            print(f"    {type(e).__name__}, waiting {wait}s (attempt {attempt + 1}/{max_retries})...")
             time.sleep(wait)
-    raise RuntimeError("Max retries exceeded for rate limit")
+    raise RuntimeError("Max retries exceeded for Anthropic API call")
 
 
 def fetch_match_data(client, home, away):
@@ -84,18 +91,20 @@ def fetch_match_data(client, home, away):
 
     response = _api_call_with_retry(
         client,
-        model="claude-haiku-4-5-20251001",
+        model=MODEL,
         max_tokens=4096,
-        tools=[{"type": "web_search_20250305", "name": "web_search"}],
+        tools=[WEB_SEARCH_TOOL],
         messages=[{"role": "user", "content": prompt}],
     )
 
-    while response.stop_reason == "pause_turn":
+    pause_turns = 0
+    while response.stop_reason == "pause_turn" and pause_turns < MAX_PAUSE_TURNS:
+        pause_turns += 1
         response = _api_call_with_retry(
             client,
-            model="claude-haiku-4-5-20251001",
+            model=MODEL,
             max_tokens=4096,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            tools=[WEB_SEARCH_TOOL],
             messages=[
                 {"role": "user", "content": prompt},
                 {"role": "assistant", "content": response.content},
@@ -120,49 +129,94 @@ def fetch_match_data(client, home, away):
     return json.loads(match.group())
 
 
+def _valid_odds_entry(odds):
+    """Decimal 1X2 odds are only usable if all three are numbers > 1.0."""
+    if not isinstance(odds, dict):
+        return False
+    for key in ("home_win", "draw", "away_win"):
+        value = odds.get(key)
+        if not isinstance(value, (int, float)) or value <= 1.0:
+            return False
+    return True
+
+
 def compute_implied_probabilities(odds_list):
-    if not odds_list:
-        return 0.0, 0.0, 0.0
+    """Average implied probabilities across bookmakers, margin removed.
 
-    home_probs, draw_probs, away_probs = [], [], []
-    for odds in odds_list:
-        home_probs.append(1.0 / odds["home_win"])
-        draw_probs.append(1.0 / odds["draw"])
-        away_probs.append(1.0 / odds["away_win"])
+    Returns None if there is no usable odds entry — callers must treat that
+    as 'no bookmaker signal', not as zero probabilities.
+    """
+    valid = [o for o in (odds_list or []) if _valid_odds_entry(o)]
+    if not valid:
+        return None
 
-    raw_home = sum(home_probs) / len(home_probs)
-    raw_draw = sum(draw_probs) / len(draw_probs)
-    raw_away = sum(away_probs) / len(away_probs)
+    raw_home = sum(1.0 / o["home_win"] for o in valid) / len(valid)
+    raw_draw = sum(1.0 / o["draw"] for o in valid) / len(valid)
+    raw_away = sum(1.0 / o["away_win"] for o in valid) / len(valid)
 
     total = raw_home + raw_draw + raw_away
     return raw_home / total, raw_draw / total, raw_away / total
 
 
-def build_match_record(data):
-    odds_list = data.get("bookmaker_odds", [])
-    bookie_home, bookie_draw, bookie_away = compute_implied_probabilities(odds_list)
+def _clamp_int(value, lo, hi, default=0):
+    try:
+        return max(lo, min(hi, int(round(float(value)))))
+    except (TypeError, ValueError):
+        return default
 
-    home_injuries = data.get("home_injuries", [])
-    away_injuries = data.get("away_injuries", [])
+
+def _norm_morale(value):
+    text = str(value or "").strip().lower()
+    first = text.split()[0] if text.split() else ""
+    return first if first in ("high", "medium", "low") else "medium"
+
+
+def _sanitize_injuries(injuries):
+    clean = []
+    for inj in injuries or []:
+        if not isinstance(inj, dict):
+            continue
+        clean.append({
+            "player": str(inj.get("player", "unknown")),
+            "importance": _clamp_int(inj.get("importance"), 1, 10, default=5),
+            "role": str(inj.get("role", "unknown")),
+        })
+    return clean
+
+
+def build_match_record(data, home, away):
+    """Validate and normalize the LLM's JSON — it is untrusted input.
+
+    Team names come from the schedule (not from the model output) so that
+    predict_today.py can always join records back to fixtures.
+    """
+    odds_list = data.get("bookmaker_odds", [])
+    implied = compute_implied_probabilities(odds_list)
+    has_odds = implied is not None
+    bookie_home, bookie_draw, bookie_away = implied if has_odds else (0.0, 0.0, 0.0)
+
+    home_injuries = _sanitize_injuries(data.get("home_injuries"))
+    away_injuries = _sanitize_injuries(data.get("away_injuries"))
 
     return {
-        "home_team": data["home_team"],
-        "away_team": data["away_team"],
+        "home_team": home,
+        "away_team": away,
         "home_injuries": home_injuries,
         "away_injuries": away_injuries,
         "home_injuries_count": len(home_injuries),
         "away_injuries_count": len(away_injuries),
-        "home_form": data.get("home_form", ""),
-        "away_form": data.get("away_form", ""),
-        "home_form_score": data.get("home_form_score", 0),
-        "away_form_score": data.get("away_form_score", 0),
-        "home_morale": data.get("home_morale", "medium"),
-        "away_morale": data.get("away_morale", "medium"),
+        "home_form": str(data.get("home_form") or ""),
+        "away_form": str(data.get("away_form") or ""),
+        "home_form_score": _clamp_int(data.get("home_form_score"), -2, 2),
+        "away_form_score": _clamp_int(data.get("away_form_score"), -2, 2),
+        "home_morale": _norm_morale(data.get("home_morale")),
+        "away_morale": _norm_morale(data.get("away_morale")),
+        "has_bookie_odds": has_odds,
         "bookie_home_prob": round(bookie_home, 4),
         "bookie_draw_prob": round(bookie_draw, 4),
         "bookie_away_prob": round(bookie_away, 4),
         "raw_odds": odds_list,
-        "key_news": data.get("key_news", []),
+        "key_news": [str(n) for n in data.get("key_news") or []],
     }
 
 
@@ -188,9 +242,12 @@ def print_summary(record):
     print(f"  Form: {h} {record.get('home_form', '')} ({record.get('home_form_score', 0):+d})"
           f"  |  {a} {record.get('away_form', '')} ({record.get('away_form_score', 0):+d})")
     print(f"  Morale: {h}: {record['home_morale']}  |  {a}: {record['away_morale']}")
-    print(f"  Implied probs — H: {record['bookie_home_prob']:.2%}  "
-          f"D: {record['bookie_draw_prob']:.2%}  "
-          f"A: {record['bookie_away_prob']:.2%}")
+    if record.get("has_bookie_odds"):
+        print(f"  Implied probs — H: {record['bookie_home_prob']:.2%}  "
+              f"D: {record['bookie_draw_prob']:.2%}  "
+              f"A: {record['bookie_away_prob']:.2%}")
+    else:
+        print("  Implied probs — brak kursów (model-only fallback)")
     if record["key_news"]:
         print("  Key news:")
         for n in record["key_news"]:
@@ -221,7 +278,7 @@ def main():
         print(f"\nFetching data for {home} vs {away}...")
         try:
             raw_data = fetch_match_data(client, home, away)
-            record = build_match_record(raw_data)
+            record = build_match_record(raw_data, home, away)
             records.append(record)
             print_summary(record)
         except Exception as e:

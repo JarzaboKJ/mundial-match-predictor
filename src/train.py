@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import joblib
 from sklearn.model_selection import (
-    train_test_split,
     RandomizedSearchCV,
     GridSearchCV,
     StratifiedKFold,
@@ -25,32 +24,18 @@ from sklearn.preprocessing import StandardScaler, label_binarize
 from xgboost import XGBClassifier
 
 from preprocessing import (
+    FEATURE_COLS,
     load_and_clean_matches,
-    build_team_stats,
-    build_h2h_stats,
+    load_ranking,
+    load_world_cup,
     build_feature_matrix,
 )
 
-FEATURE_COLS = [
-    "rank_diff",
-    "points_diff",
-    "home_win_rate",
-    "away_win_rate",
-    "home_recent_win_rate",
-    "away_recent_win_rate",
-    "h2h_home_wins",
-    "h2h_draws",
-    "h2h_away_wins",
-    "stage",
-    "home_appearances",
-    "away_appearances",
-    "home_champion_count",
-    "away_champion_count",
-    "home_final_appearances",
-    "away_final_appearances",
-]
-
 CLASS_NAMES = ["home_win", "draw", "away_win"]
+
+# Temporal holdout: train on 1930-2014, evaluate on the last two tournaments.
+# A random split overstates deployment performance for time-ordered data.
+TEST_FROM_YEAR = 2018
 
 
 def compute_metrics(name, y_true, y_pred, y_proba):
@@ -110,17 +95,12 @@ def main():
     df = load_and_clean_matches()
     print(f"  {len(df)} matches loaded")
 
-    print("Building team stats...")
-    team_stats = build_team_stats(df)
-
-    print("Building head-to-head stats...")
-    h2h_stats = build_h2h_stats(df)
-
     print("Loading ranking data (2022 as historical proxy)...")
-    ranking_df = pd.read_csv("data/raw/fifa_ranking_2022-10-06.csv")
+    ranking_df = load_ranking("data/raw/fifa_ranking_2022-10-06.csv")
+    world_cup_df = load_world_cup()
 
-    print("Building feature matrix...")
-    features_df = build_feature_matrix(df, team_stats, h2h_stats, ranking_df)
+    print("Building time-aware feature matrix (no leakage)...")
+    features_df = build_feature_matrix(df, world_cup_df, ranking_df)
     features_df.to_csv("data/processed/features.csv", index=False)
     print(f"  Feature matrix saved: {len(features_df)} rows, {len(FEATURE_COLS)} features")
 
@@ -128,9 +108,11 @@ def main():
     y = features_df["target"].values
     sample_weights = np.where(features_df["Year"] >= 2010, 2.0, 1.0)
 
-    X_train, X_test, y_train, y_test, w_train, _ = train_test_split(
-        X, y, sample_weights, test_size=0.2, random_state=42, stratify=y
-    )
+    test_mask = features_df["Year"].values >= TEST_FROM_YEAR
+    X_train, y_train, w_train = X[~test_mask], y[~test_mask], sample_weights[~test_mask]
+    X_test, y_test = X[test_mask], y[test_mask]
+    print(f"  Temporal split: {len(y_train)} train (<{TEST_FROM_YEAR}), "
+          f"{len(y_test)} test ({TEST_FROM_YEAR}+)")
 
     # ── Baseline training (before tuning) ────────────────────────
     print("\n" + "=" * 60)
@@ -262,10 +244,16 @@ def main():
         print(f"  {FEATURE_COLS[i]:30s} {importances[i]:.4f}")
 
     # ── Save best models ─────────────────────────────────────────
+    # Metrics above come from the temporal holdout; the deployed model is
+    # refit on all data so 2018/2022 matches also inform 2026 predictions.
     os.makedirs("models", exist_ok=True)
-    joblib.dump(xgb_tuned, "models/model.pkl")
-    joblib.dump(lr_tuned, "models/baseline_model.pkl")
-    print("\nModels saved:")
+    final_xgb = XGBClassifier(**xgb_tuned.get_params())
+    final_xgb.fit(X, y, sample_weight=sample_weights)
+    final_lr = lr_search.best_estimator_
+    final_lr.fit(X, y, logisticregression__sample_weight=sample_weights)
+    joblib.dump(final_xgb, "models/model.pkl")
+    joblib.dump(final_lr, "models/baseline_model.pkl")
+    print("\nModels saved (refit on all years):")
     print("  models/model.pkl (XGBoost tuned)")
     print("  models/baseline_model.pkl (LR tuned)")
 

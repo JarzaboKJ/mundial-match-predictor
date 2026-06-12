@@ -233,10 +233,13 @@ git status
 echo ""
 
 # Sprawdź jawnie, czy .env i data/raw są ignorowane
-touch .env 2>/dev/null || true   # stwórz tymczasowo żeby przetestować
+# UWAGA: jeśli .env już istnieje (z prawdziwym kluczem), nie wolno go usuwać!
+ENV_EXISTED=0
+[[ -f .env ]] && ENV_EXISTED=1
+[[ $ENV_EXISTED -eq 0 ]] && touch .env   # tymczasowy plik tylko do testu ignore
 IGNORED_ENV=$(git check-ignore -v .env 2>/dev/null && echo "TAK" || echo "NIE")
 IGNORED_RAW=$(git check-ignore -v data/raw 2>/dev/null && echo "TAK" || echo "NIE")
-rm -f .env 2>/dev/null || true   # usuń plik testowy
+[[ $ENV_EXISTED -eq 0 ]] && rm -f .env   # usuń tylko plik testowy, nigdy prawdziwy .env
 
 echo -e "  .env ignorowany przez git:      ${GREEN}${IGNORED_ENV}${NC}"
 echo -e "  data/raw/ ignorowany przez git: ${GREEN}${IGNORED_RAW}${NC}"

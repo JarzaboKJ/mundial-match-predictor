@@ -13,6 +13,11 @@ def main():
         choices=["home_win", "draw", "away_win"],
         help="Actual match result",
     )
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="Match date (ISO). Required when the same teams met more than once.",
+    )
     args = parser.parse_args()
 
     path = "results/results.json"
@@ -23,19 +28,37 @@ def main():
         print(f"ERROR: {path} not found. Run predict_today.py first.")
         sys.exit(1)
 
-    found = False
-    for match in data["matches"]:
-        if match["home_team"] == args.home and match["away_team"] == args.away:
-            match["actual_result"] = args.result
-            match["correct"] = match["predicted_winner"] == args.result
-            found = True
-            status = "TRAFIONY" if match["correct"] else "PUDLO"
-            print(f"{args.home} vs {args.away}: wynik={args.result}, predykcja={match['predicted_winner']} -> {status}")
-            break
+    candidates = [
+        m for m in data["matches"]
+        if m["home_team"] == args.home and m["away_team"] == args.away
+        and (args.date is None or m["date"] == args.date)
+    ]
 
-    if not found:
-        print(f"ERROR: Match {args.home} vs {args.away} not found in results.json")
+    if not candidates:
+        print(f"ERROR: Match {args.home} vs {args.away}"
+              f"{' on ' + args.date if args.date else ''} not found in results.json")
         sys.exit(1)
+
+    if len(candidates) > 1:
+        # The same pairing can occur twice in one World Cup (group stage +
+        # knockout); without a date we would silently update the wrong match.
+        print(f"ERROR: {len(candidates)} matches found for {args.home} vs {args.away}. "
+              f"Disambiguate with --date:")
+        for m in candidates:
+            print(f"  --date {m['date']} (predicted: {m['predicted_winner']}, "
+                  f"actual: {m['actual_result']})")
+        sys.exit(1)
+
+    match = candidates[0]
+    if match["actual_result"] is not None and match["actual_result"] != args.result:
+        print(f"NOTE: overwriting previously recorded result "
+              f"{match['actual_result']} -> {args.result}")
+
+    match["actual_result"] = args.result
+    match["correct"] = match["predicted_winner"] == args.result
+    status = "TRAFIONY" if match["correct"] else "PUDLO"
+    print(f"{args.home} vs {args.away} ({match['date']}): wynik={args.result}, "
+          f"predykcja={match['predicted_winner']} -> {status}")
 
     evaluated = [m for m in data["matches"] if m["actual_result"] is not None]
     total = len(evaluated)
