@@ -59,7 +59,19 @@ form_score scale based on last 5 matches:
 - +1: good (3 wins or strong recent run)
 -  0: average/mixed results
 - -1: poor (mostly draws and losses)
-- -2: terrible (0-1 wins, losing streak)"""
+- -2: terrible (0-1 wins, losing streak)
+
+Team name aliases — when searching for odds or news, try both names:
+- "Côte d'Ivoire" = "Ivory Coast"
+- "Türkiye" = "Turkey"
+- "Korea Republic" = "South Korea"
+- "IR Iran" = "Iran"
+- "Congo DR" = "DR Congo" = "Democratic Republic of Congo"
+- "Bosnia-Herzegovina" = "Bosnia and Herzegovina" = "Bosnia"
+- "Cape Verde" = "Cabo Verde"
+- "Curaçao" = "Curacao"
+- "Czechia" = "Czech Republic"
+- "United States" = "USA" = "USMNT\""""
 
 
 def get_todays_matches():
