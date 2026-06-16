@@ -10,7 +10,7 @@ import numpy as np
 NAME_MAP = {
     "United States": "USA",
     "Bosnia-Herzegovina": "Bosnia and Herzegovina",
-    "Cape Verde": "Cabo Verde",
+    "IR Iran": "IR Iran",
     # Successor states / renames (FIFA attributes the historical record
     # of the predecessor to the current federation):
     "Czech Republic": "Czechia",
