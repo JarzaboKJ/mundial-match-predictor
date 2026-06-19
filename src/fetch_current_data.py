@@ -71,7 +71,12 @@ Team name aliases — when searching for odds or news, try both names:
 - "Cape Verde" = "Cabo Verde"
 - "Curaçao" = "Curacao"
 - "Czechia" = "Czech Republic"
-- "United States" = "USA" = "USMNT\""""
+- "United States" = "USA" = "USMNT"
+
+If you cannot find bookmaker odds under the exact team name, try alternative names:
+Côte d'Ivoire/Ivory Coast, Cabo Verde/Cape Verde, IR Iran/Iran,
+DR Congo/Congo DR/DRC, Korea Republic/South Korea.
+Always search at least 2 query variations before reporting no odds found."""
 
 
 def get_todays_matches():
