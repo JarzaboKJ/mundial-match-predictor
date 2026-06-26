@@ -48,6 +48,7 @@ def collect_2026_matches(results: dict, schedule: pd.DataFrame) -> pd.DataFrame:
     """
     rows = {}
     for m in results["matches"]:
+        # Include --no-prediction entries (correct=None) — actual_result is all we need.
         if m["actual_result"] is None:
             continue
         h_score, a_score = RESULT_TO_SCORES[m["actual_result"]]

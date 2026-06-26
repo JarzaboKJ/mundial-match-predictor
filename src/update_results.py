@@ -18,6 +18,11 @@ def main():
         default=None,
         help="Match date (ISO). Required when the same teams met more than once.",
     )
+    parser.add_argument(
+        "--no-prediction",
+        action="store_true",
+        help="Log result without a prediction (training data only, not counted in accuracy).",
+    )
     args = parser.parse_args()
 
     path = "results/results.json"
@@ -34,33 +39,67 @@ def main():
         and (args.date is None or m["date"] == args.date)
     ]
 
-    if not candidates:
-        print(f"ERROR: Match {args.home} vs {args.away}"
-              f"{' on ' + args.date if args.date else ''} not found in results.json")
-        sys.exit(1)
+    if args.no_prediction:
+        if len(candidates) > 1:
+            print(f"ERROR: {len(candidates)} matches found for {args.home} vs {args.away}. "
+                  f"Disambiguate with --date:")
+            for m in candidates:
+                print(f"  --date {m['date']} (actual: {m['actual_result']})")
+            sys.exit(1)
 
-    if len(candidates) > 1:
-        # The same pairing can occur twice in one World Cup (group stage +
-        # knockout); without a date we would silently update the wrong match.
-        print(f"ERROR: {len(candidates)} matches found for {args.home} vs {args.away}. "
-              f"Disambiguate with --date:")
-        for m in candidates:
-            print(f"  --date {m['date']} (predicted: {m['predicted_winner']}, "
-                  f"actual: {m['actual_result']})")
-        sys.exit(1)
+        if candidates:
+            match = candidates[0]
+            match["actual_result"] = args.result
+            match["predicted_winner"] = None
+            match["model_proba"] = None
+            match["final_proba"] = None
+            match["correct"] = None
+            print(f"Updated: {args.home} vs {args.away} ({match['date']}): "
+                  f"wynik={args.result} [bez predykcji, tylko dane treningowe]")
+        else:
+            if args.date is None:
+                print("ERROR: --date is required when adding a new match with --no-prediction.")
+                sys.exit(1)
+            data["matches"].append({
+                "date": args.date,
+                "home_team": args.home,
+                "away_team": args.away,
+                "model_proba": None,
+                "final_proba": None,
+                "predicted_winner": None,
+                "actual_result": args.result,
+                "correct": None,
+            })
+            print(f"Added: {args.home} vs {args.away} ({args.date}): "
+                  f"wynik={args.result} [bez predykcji, tylko dane treningowe]")
 
-    match = candidates[0]
-    if match["actual_result"] is not None and match["actual_result"] != args.result:
-        print(f"NOTE: overwriting previously recorded result "
-              f"{match['actual_result']} -> {args.result}")
+    else:
+        if not candidates:
+            print(f"ERROR: Match {args.home} vs {args.away}"
+                  f"{' on ' + args.date if args.date else ''} not found in results.json")
+            sys.exit(1)
 
-    match["actual_result"] = args.result
-    match["correct"] = match["predicted_winner"] == args.result
-    status = "TRAFIONY" if match["correct"] else "PUDLO"
-    print(f"{args.home} vs {args.away} ({match['date']}): wynik={args.result}, "
-          f"predykcja={match['predicted_winner']} -> {status}")
+        if len(candidates) > 1:
+            print(f"ERROR: {len(candidates)} matches found for {args.home} vs {args.away}. "
+                  f"Disambiguate with --date:")
+            for m in candidates:
+                print(f"  --date {m['date']} (predicted: {m['predicted_winner']}, "
+                      f"actual: {m['actual_result']})")
+            sys.exit(1)
 
-    evaluated = [m for m in data["matches"] if m["actual_result"] is not None]
+        match = candidates[0]
+        if match["actual_result"] is not None and match["actual_result"] != args.result:
+            print(f"NOTE: overwriting previously recorded result "
+                  f"{match['actual_result']} -> {args.result}")
+
+        match["actual_result"] = args.result
+        match["correct"] = match["predicted_winner"] == args.result
+        status = "TRAFIONY" if match["correct"] else "PUDLO"
+        print(f"{args.home} vs {args.away} ({match['date']}): wynik={args.result}, "
+              f"predykcja={match['predicted_winner']} -> {status}")
+
+    # Accuracy counts only matches that had a prediction (correct is not None)
+    evaluated = [m for m in data["matches"] if m.get("correct") is not None]
     total = len(evaluated)
     correct = sum(1 for m in evaluated if m["correct"])
     accuracy = correct / total if total > 0 else 0.0
@@ -74,7 +113,7 @@ def main():
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    print(f"Accuracy po {total} meczach: {accuracy*100:.1f}% ({correct}/{total})")
+    print(f"Accuracy po {total} predykcjach: {accuracy*100:.1f}% ({correct}/{total})")
 
 
 if __name__ == "__main__":
